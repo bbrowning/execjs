@@ -71,6 +71,7 @@ module ExecJS
     def dynjs
       unless defined? @dynjs
         config = Java::OrgDynjs::Config.new(JRuby.runtime.jruby_class_loader)
+        config.node_package_manager_enabled = false
         @dynjs = Java::OrgDynjsRuntime::DynJS.new(config)
       end
       @dynjs
