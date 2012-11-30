@@ -82,14 +82,21 @@ module ExecJS
 
     def available?
       require "java"
+      # TODO: A dynjs rubygem needs to be made and required here.
+      # A lot of the other code in this file needs to be moved into that
+      # gem so it's not interacting with java classes directly from execjs.
       if ENV['DYNJS_JAR']
         require ENV['DYNJS_JAR']
+        Java::OrgDynjs::Config.new
         true
       else
         $stderr.puts "For now, you must set the DYNJS_JAR environment variable"
         false
       end
     rescue LoadError
+      false
+    rescue NameError
+      $stderr.puts "DynJS requires Java 7 and you appear to be using an earlier version"
       false
     end
   end
