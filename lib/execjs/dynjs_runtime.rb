@@ -7,7 +7,7 @@ module ExecJS
         source = encode(source)
         @dynjs = runtime.dynjs
         @context = Java::OrgDynjsRuntime::ExecutionContext.create_global_execution_context(@dynjs)
-        @dynjs.evaluate(@context, source, false, false)
+        @dynjs.new_runner.with_context(@context).with_source(source).execute
       end
 
       def exec(source, options = {})
@@ -22,7 +22,7 @@ module ExecJS
         source = encode(source)
 
         if /\S/ =~ source
-          unbox @dynjs.evaluate(@context, "(#{source})", false, false)
+          unbox @dynjs.new_runner.with_context(@context).with_source("(#{source})").execute
         end
       rescue Java::OrgDynjsException::ThrowException => e
         if e.message =~ /^SyntaxError/
@@ -33,17 +33,32 @@ module ExecJS
       end
 
       def call(properties, *args)
-        function = @dynjs.evaluate(@context, properties, false, false)
+        function = @dynjs.new_runner.with_context(@context).with_source(properties).execute
         # JRuby gets a bit confused on the overloaded varargs call method
         # unbox @context.call(function, function, *args)
         unbox @context.java_send(:call, [org.dynjs.runtime.JSFunction.java_class,
                                          java.lang.Object, [].to_java.java_class],
-                                 function, function, args)
+                                 function, function, box(args))
       rescue Java::OrgDynjsException::ThrowException => e
         if e.message =~ /^SyntaxError/
           raise RuntimeError, e.message
         else
           raise ProgramError, e.message
+        end
+      end
+
+      def box(value)
+        case value
+        when Array then
+          value.map { |element| box(element) }
+        when Hash then
+          dyn_object = Java::OrgDynjsRuntime::DynObject.new(@context.global_object)
+          value.each_pair do |key, val|
+            dyn_object.put(@context, key, box(val), false)
+          end
+          dyn_object
+        else
+          value
         end
       end
 
@@ -72,6 +87,7 @@ module ExecJS
       unless defined? @dynjs
         config = Java::OrgDynjs::Config.new(JRuby.runtime.jruby_class_loader)
         config.node_package_manager_enabled = false
+        # config.invoke_dynamic_enabled = false
         @dynjs = Java::OrgDynjsRuntime::DynJS.new(config)
       end
       @dynjs
